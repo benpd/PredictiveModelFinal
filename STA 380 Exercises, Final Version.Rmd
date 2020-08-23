@@ -1,0 +1,1004 @@
+---
+title: "STA 380 Exercises"
+output:
+  github_document: default
+  md_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,warning = TRUE, message = TRUE,error = TRUE)
+options(warn=-1)
+
+```
+ 
+# Predictive Modeling Exercises
+
+## Question One: Green Buildings
+
+### (i) Initial thoughts on the Total Excel Guru's Analysis
+The biggest issue with the analysis presented in the question is its disregard for the plethora of other factors that may play a role in *Rent* levels. The assumption that there is an airtight correlation between *Rent* and *green_rating* without checking for and ruling out confounding variables raises a red flag. Right away, *size, stories, age,* and *class* seemed like obvious contributors to rent, so I began by making scatter plots and building regressions for these.
+
+### (ii) Looking for Basic Correlations
+The three scatter plots below show the general trends of *Rent* against the variables mentioned above. Note that each of the r-square values is very low, so to the Excel guru's credit, they were right to base their analysis on median *Rent* rather than the average in order to decrease the impact of outliers on their computations. The boxplot demonstrates the large number of outliers in each building class (high degree of lognormal skew) and compares averages and medians for classes A, B, and C.
+  
+```{r q1_size_rent_scatterplot, echo=FALSE, message=FALSE}
+
+library(ggplot2)
+greenbuildings <- read.csv('https://raw.githubusercontent.com/jgscott/STA380/master/data/greenbuildings.csv')
+attach(greenbuildings)
+greenbuildings$green_rating = as.factor(greenbuildings$green_rating)
+
+sizevsrent.lm = lm(Rent~size)
+#summary(sizevsrent.lm)
+ggplot(greenbuildings, aes(x=size, y=Rent)) + 
+  geom_point(mapping=aes(x=size, y=Rent, colour=green_rating)) + 
+  geom_smooth(method="lm", se=TRUE, fullrange=FALSE, level=0.95,
+              color='#228B22') +
+  scale_color_manual(values=c('#2a2a2a', '#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Size and Rent','r^2 = 0.0189 \nm = 6.969e-06\n') +
+  xlab('\nSize in Square Feet') +
+  ylab('Rent ($/sq ft/year)\n')
+
+```
+  
+**The Size and Rent Scatter Plot** demonstrates that *Rent* increases as square-footage increases. In the next section, we will determine whether green buildings tend to be larger or smaller than others to get an idea of whether we can expect higher rent from green buildings in general.
+  
+---
+  
+```{r q1_stories_rent_scatterplot, echo=FALSE, message=FALSE}
+
+storiesvsrent.lm = lm(Rent~stories)
+#summary(storiesvsrent.lm)
+ggplot(greenbuildings, aes(x=stories, y=Rent)) + 
+  geom_point(mapping=aes(x=stories, y=Rent, colour=green_rating)) + 
+  geom_smooth(method="lm", se=TRUE, fullrange=FALSE, level=0.95,
+              color='#228B22') +
+  scale_color_manual(values=c('#2a2a2a', '#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Number of Stories and Rent','r^2 = 0.0134 \nm = 0.1424\n') +
+  xlab('\nBuilding Height in Stories') +
+  ylab('Rent ($/sq ft/year)\n')      
+
+```
+  
+**The Number of Stories and Rent Scatter Plot** corroborates the plot above, but since there is even less explanatory power in the *stories* model, we won't examine *stories* further.
+  
+---
+  
+```{r q1_age_rent_scaterplot, echo=FALSE, message=FALSE}
+
+agevsrent.lm = lm(Rent~age)
+#summary(agevsrent.lm)
+ggplot(greenbuildings, aes(x=age, y=Rent)) + 
+  geom_point(mapping=aes(x=age, y=Rent, colour=green_rating)) + 
+  geom_smooth(method="lm", se=TRUE, fullrange=FALSE, level=0.95,
+              color='#228B22') +
+  scale_color_manual(values=c('#2a2a2a', '#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Age and Rent','r^2 = 0.0104 \nm = -0.048\n') +
+  xlab('\nBuilding Age in Years') +
+  ylab('Rent ($/sq ft/year)\n')
+
+```
+  
+**The Age and Rent Scatter Plot** demonstrates that *Rent* increases with newer buildings. In the next section, we will determine whether there are more green, new buildings than older ones.
+  
+---
+    
+```{r q1_class_age_boxplot, echo=FALSE}
+
+temp = class_a-class_b
+greenbuildings$class[temp == -1] = "B"
+greenbuildings$class[temp == 0] = "C"
+greenbuildings$class[temp == 1] = "A"
+
+avgrentA = mean(greenbuildings$Rent[which(greenbuildings$class=='A')])
+avgrentB = mean(greenbuildings$Rent[which(greenbuildings$class=='B')])
+avgrentC = mean(greenbuildings$Rent[which(greenbuildings$class=='C')])
+medrentA = median(greenbuildings$Rent[which(greenbuildings$class=='A')])
+medrentB = median(greenbuildings$Rent[which(greenbuildings$class=='B')])
+medrentC = median(greenbuildings$Rent[which(greenbuildings$class=='C')])
+
+classvsrent.box <- ggplot(greenbuildings, aes(x=class, y=Rent)) +
+  geom_point(mapping=aes(x=class, y=Rent, colour=green_rating)) +
+  geom_boxplot() + 
+  scale_color_manual(values=c('#2a2a2a', '#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Class and Rent','Class A average = $32.32, median = $28.20 \nClass B average = $26.39, median = $24.00 \nClass C average = $23.94, median = $22.06\n') +
+  xlab('\nClass') +
+  ylab('Rent\n')
+classvsrent.box
+
+```
+  
+**The Class and Rent Box Plot** confirms that Class A buildings, which are considered the most desirable, earn the most rent. In the next section, we will look at the relative number of green buildings in A, B, and C.
+  
+---
+  
+### (iii) Are there more green buildings in groups that correlate with higher Rent?
+Based on the regressions above, there are a few variables we want to take a closer look at. Specifically, we are interested in relative counts of green and standard buildings of varying *size, age,* and *class.*
+  
+```{r q1_size_densityplot, echo=FALSE}
+
+avgsizegreen = mean(greenbuildings$size[greenbuildings$green_rating==1])
+avgsizenotgreen = mean(greenbuildings$size[greenbuildings$green_rating==0])
+
+ggplot(greenbuildings[greenbuildings$size<2000000, ], aes(x=size)) +
+  geom_density(color=NA, aes(fill=factor(green_rating)), alpha=0.75) +
+  geom_vline(aes(xintercept=mean(size[green_rating==1])),color='#000000',
+             linetype='dotted') +
+  geom_vline(aes(xintercept=mean(size[green_rating==0])),color='#000000',
+             linetype='dotted') +
+  scale_fill_manual(values=c('black', '#228B22'),name='Building Type',breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Size of Green versus Standard Buildings','Green average = 325,781 \nStandard average = 225,977\n') +
+  xlab('\nSize in Square Feet') +
+  ylab('Relative Number of Buildings\n')  
+
+```
+  
+**The Size of Green versus Standard Buildings Density Plot** demonstrates that as size increases, the proportion of green buildings increases. Once you consider buidings larger than roughly 100,000 square feet, there are more green buildings than standard. This plot suggests a positive correlation between *size* and *Rent* where larger buildings make more money. Note that there are buildings larger than 2,000,000 sqaure feet; for the purposes of visualization, those were excluded from the graph but still factored into the averages.
+  
+---
+  
+```{r q1_age_densityplot, echo=FALSE}
+
+avgagegreen = mean(greenbuildings$age[greenbuildings$green_rating==1])
+aveagenotgreen = mean(greenbuildings$age[greenbuildings$green_rating==0])
+
+ggplot(greenbuildings[greenbuildings$age<150, ], aes(x=age)) +
+  geom_density(color=NA, aes(fill=factor(green_rating)), alpha=0.75) +
+  geom_vline(aes(xintercept=mean(age[green_rating==1])),color='#000000',
+             linetype='dotted') +
+  geom_vline(aes(xintercept=mean(age[green_rating==0])),color='#000000',
+             linetype='dotted') +
+  scale_fill_manual(values=c('black', '#228B22'),name='Building Type',breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Age of Green versus Standard Buildings','Green average = 23.8452 \nStandard average = 49.4673\n') +
+  xlab('\nAge in Years') +
+  ylab('Relative Number of Buildings\n') 
+
+```
+  
+**The Age of Green versus Standard Buildings Density Plot** reveals that green buildings have shot up in popularity in Austin. While there are a handful or green buildings 100 years old, there was a surge of green construction around 22 years ago. This plot suggests a negative correlation between *age* and *Rent* where younger buildings make more money. Note that there are standard buildings older than 150 years; for the purposes of visualization, those were excluded from the graph but still factored into the averages.
+  
+---
+  
+```{r q1_class_greenstatus_barplot, echo=FALSE}
+
+ggplot(greenbuildings, aes(class, ..count..)) + 
+  geom_bar(aes(fill = green_rating)) +
+  scale_fill_manual(values=c('#4a4a4a', '#228B22'),name='Building Type',breaks=c('0','1'),labels=c('Standard','Green')) +
+  ggtitle('Green Buildings in Each Class\n') +
+  xlab('\nClass') +
+  ylab('Building Count\n')
+
+```
+  
+**The Number of Green Buildings in Each Class Bar Chart** shows that there are more green buildings in Class A. Based on this fact, as well as the fact that median *Rent* increases from class C to B to A, we can reasonably claim that there is a correlation between *green_status* and higher *Rent.* When you consider the predominance of green buildings in Class A, which correlates to higher *Rent,* we argue that there is at least an indirect relationship between *green_status* and the higher *Rent* levels commanded by Class A status, moderate levels by Class B, and low levels by Class C.
+  
+---
+  
+### (iv) Visualizing Profitability of a Green Investment
+We have illustrated that green buildings differ from standard buildings with respect to important variables (*size, age,* and *class*). Now to verify whether the real estate developer can profit more by investing in a green building, we will examine the change over time of median rent for green and standard buildings.
+  
+```{r q1_timeline1and2, echo=FALSE, fig.show="hold", out.width="50%"}
+
+par(mar = c(4, 4, .1, .1))
+
+greenbuildings$negage = greenbuildings$age*-1
+greenbuildings$yearbuilt <- cut(greenbuildings$negage, 
+                                breaks = c(0, seq(-10, -120, by = -10)), 
+                                labels =c(1910, seq(1920, 2020, by = 10)),
+                                right=FALSE)
+
+estmedians <- aggregate(Rent~yearbuilt + green_rating, greenbuildings, median)
+ggplot(data = estmedians, mapping = aes(y = Rent, x = yearbuilt, 
+                                     group = green_rating, 
+                                     colour=green_rating)) +
+  geom_line() +
+  scale_color_manual(values=c('#5a5a5a','#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  labs(x="\nYear", y='Median Rent\n', 
+       title = 'Estimated Median Rent Over Time for All Buildings\n',
+       fill='Green building')
+
+estmeans <- aggregate(Rent~yearbuilt + green_rating, greenbuildings, mean)
+ggplot(data = estmeans, mapping = aes(y = Rent, x = yearbuilt, 
+                                   group = green_rating, 
+                                   colour=green_rating)) +
+  geom_line() +
+  scale_color_manual(values=c('#5a5a5a','#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  labs(x="\nYear", y='Average Rent\n', 
+       title = 'Estimated Average Rent Over Time for All Buildings\n',
+       fill='Green building')
+
+```
+  
+**The Median and Average Rent Timelines** above illustrate the trends of *Rent* levels for green and standard buildings. Both median and average are included here to highlight the difference between the two statistics. These graphs show that the difference in *Rent* between green and standard buildings is decreasing. We cannot say outright that these graphs tell us that green real estate is no longer demanding a premium, because these estimates do not account for size, class, or other potentially relevant variables. The next graph accounts for *class* and demonstrates the need for more in-depth models when projecting *Rent* levels.
+  
+---
+  
+```{r q1_timeline3, echo=FALSE, fig.align='center'}
+
+estmediansclassA <- aggregate(Rent~yearbuilt + green_rating, 
+                              greenbuildings[greenbuildings$class=='A', ], 
+                              median)
+ggplot(data = estmediansclassA, mapping = aes(y = Rent, x = yearbuilt, 
+                                     group = green_rating, 
+                                     colour=green_rating)) +
+  geom_line() +
+  scale_color_manual(values=c('#5a5a5a','#228B22'),name='Building Type',
+                     breaks=c('0','1'),labels=c('Standard','Green')) +
+  labs(x="\nYear", y='Median Rent\n', 
+       title = 'Estimated Median Rent Over Time for Class A Buildings\n',
+       fill='Green building')
+
+```
+
+**These Three Timelines** provide clear evidence that there is too much variation among the buildings (e.g., *size*, *class*, etc.) to base a recommendation to the developer solely on median rent. A better way to formulate a recommendation to the developer without using more sophisticated models is to consider the broader trends within the data.
+  
+---
+  
+```{r q1_suggestion_calcs, include=FALSE}
+
+#median leasing rate for all buildings
+estlease0 = median(greenbuildings$leasing_rate)
+#estimating the lease rate for class A buildings larger than 300,000sqft 
+estlease1 = median(greenbuildings$leasing_rate[greenbuildings$size>325781 &
+                   greenbuildings$class=='A'])
+#same as above but for green buildings
+estlease2 = median(greenbuildings$leasing_rate[greenbuildings$size>325781 & 
+                   greenbuildings$class=='A' &
+                   greenbuildings$green_rating==1])
+#median rent for building with above characteristics
+estrent = median(greenbuildings$Rent[greenbuildings$size>325781 & 
+                   greenbuildings$class=='A' &
+                   greenbuildings$green_rating==1])
+#estimating the time to break even
+yearstobreakeven = 5000000/(26*325781*.934)
+12*.27
+```
+### (v) General Recommendations to the Developer
+Based on the figures provided and the observations we have made, these are the best ways for the developer to increase the amount of rent they can charge:
+  
+*Size* - Build a space that is at least as large as the average among green buildings (325,781sqft). Rent increases as square footage increases, so an above-average-sized green building is likely to be more profitable.
+  
+*Class* - Class A buildings can charge up to $6/sqft more than class B and almost \$9 more than class C. Furthermore, we've demonstrated that there are significantly more green buildings in class A than B or C, suggesting that "greenness" lends to desirability.
+  
+If the developer were to follow these suggestions, we estimate that the leasing rate could be as much as 4.12% higher compared to the median of all buildings. Using this leasing rate, our suggested size, and the median rent for green class A buildings, the developer should expect to recover the costs of construction and green certification in 13 years and four months. Recovering the green certification alone will only take eight months.
+  
+---
+  
+## Question Two: Airport Visual Storytelling pt. Two
+
+```{r, q2, echo=FALSE, message=FALSE}
+
+library(ggplot2)
+library(mosaic)
+library(tidyverse)
+
+air = read.csv('https://raw.githubusercontent.com/jgscott/STA380/master/data/ABIA.csv', header=TRUE)
+summary(air)
+head(air)
+
+```
+  
+The two histograms below show the delay durations for flights at the Austin airport. Both show the same data but are binned differently to smooth out the plots. There are no delays recorded that are longer than two hours; this makes sense because flights that are delayed for that long are usually canceled.
+  
+```{r, echo=FALSE}
+
+hist(air$DepDelay)
+hist(air$DepDelay, breaks=100)
+
+```
+  
+---
+  
+This plot shows that airlines have cutoff times for delays when deciding whether or not to cancel a flight. The three small clusters of points where *Cancelled* equals 1 show that there are common delay time intervals (0 minutes, ~100 min, and ~200 min) where airlines decide to cancel flights.
+```{r, echo=FALSE}
+#plot(air$DepDelay, air$Cancelled)
+plot(Cancelled ~ DepDelay, data=air) 
+
+```
+  
+---
+  
+This box plot illustrates delay times over different days of the week.
+```{r, echo=FALSE}
+
+boxplot(DepDelay ~ DayOfWeek, data=air)
+#air
+
+```
+  
+The box plot below shows the time in the air for each airline. This tells us which airlines have longer flights. OH has the most outliers, meaning they have the least consistent flight duration, so we can infer that it is a non-commuter airline that goes to many different airports.
+  
+```{r, echo=FALSE}
+
+ggplot(data=air) + 
+  geom_boxplot(mapping=aes(x=UniqueCarrier, y=AirTime))
+
+```
+  
+---
+  
+The second box plot illustrates departure delays for each airline. Airline 9E has the longest delay duration within the data set.
+```{r, echo=FALSE}
+
+ggplot(data=air) + 
+  geom_boxplot(mapping=aes(x=UniqueCarrier, y=DepDelay))
+
+```
+  
+---
+  
+The first scatter plot below shows arrival and departure delays; although the relationship is not perfectly 1:1, the graph tells us that when flight arrivals are delayed, subsequent departures are alos delayed. Furthermore, this tells us that flights are not cancelled when planes arrive late. Because the graph is linear, there isn't a long turnover in Austin. 
+  
+The array of scatter plots below that focus on arrival and departure delays for each airline, illustrating which airlines have the longest delays in general, including 9E, B6, and CO.
+```{r, echo=FALSE}
+
+ggplot(data = air) + 
+  geom_point(mapping = aes(x = DepDelay, y = ArrDelay, color = UniqueCarrier))
+
+ggplot(data = air) + 
+  geom_point(mapping = aes(x = DepDelay, y = ArrDelay)) + 
+  facet_wrap(~ UniqueCarrier, nrow = 2)
+
+```
+  
+---
+  
+The two arrays illustrate a key point: some airlines operate seasonally (e.g., NQ and NW). The empty scatter plots from August to December in NQ and those from February to March and June to December for NW are months where no delays are recorded. However, we think that it is more reasonable to interepret this as months where these two airlines are no operating rather than months with absolutely no delays.
+
+```{r, echo=FALSE}
+
+# faceting on two variables
+ggplot(data = air) + 
+  geom_point(mapping = aes(x = ArrDelay, y = ArrTime)) + 
+  facet_grid(Month ~ UniqueCarrier)
+
+# faceting on two variables
+ggplot(data = air) + 
+  geom_point(mapping = aes(x = ArrDelay, y = DepDelay)) + 
+  facet_grid(Month ~ UniqueCarrier)
+
+```
+  
+---
+  
+This density plot shows the distance that each airline travels; when plotted by frequency, this illustrates the relative distances between airlines. We see that F9 travels routinely to the same destination.
+```{r, echo=FALSE}
+
+# Density plot: like a histogram
+g = ggplot(air, aes(x=Distance))
+g + geom_density(aes(fill=factor(UniqueCarrier)), alpha=0.6)
+
+```
+
+This final chart shows the time spent (*actualElapsedTime*) at each destination.
+```{r, echo=FALSE}
+
+ggplot(air, aes(x=Dest, y=air$ActualElapsedTime)) + 
+  geom_bar(stat='identity') +
+  coord_flip()
+
+```
+
+---
+  
+## Question Three: Portfolio Modeling
+
+### (i) A Diversified Portfolio
+I chose the stocks included in this portfolio because they are part of ETFdb's *Diversified Portfolio*. When selecting these, I looked into each to make sure none were too similar; I also found references to a 5/25 rule that suggests including five different asset classes and making sure that you don't allocate more than 25% of your money to any single stock when diversifying. 
+
+```{r q3_diversified_port_plot, echo=FALSE, message=FALSE}
+
+library(mosaic)
+library(quantmod)
+library(foreach)
+
+# Load and adjust stocks for portfolio one (port1)
+mystocks = c("AOR", "GYLD", "YYY", "PSMC", "TBND")
+myprices = getSymbols(mystocks, from = "2007-01-01")
+for(ticker in mystocks) {
+  expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+  eval(parse(text=expr))
+}
+
+# Matrix of returns
+all_returns = cbind(ClCl(AORa),ClCl(GYLDa),ClCl(YYYa),ClCl(PSMCa),ClCl(TBNDa))
+all_returns = as.matrix(na.omit(all_returns))
+
+# Simulate four trading weeks and get the average result for 5000 iterations
+initial_wealth = 100000
+port1sim = foreach(i=1:5000, .combine='rbind') %do% {
+  total_wealth = initial_wealth
+  weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+  holdings = weights * total_wealth
+  n_days = 20
+  wealthtracker = rep(0, n_days)
+  for(today in 1:n_days) {
+    return.today = resample(all_returns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    total_wealth = sum(holdings)
+    wealthtracker[today] = total_wealth
+  }
+  wealthtracker
+}
+
+# Portfolio one profit/loss
+hist(port1sim[,n_days] - initial_wealth, breaks=30, 
+     main="Frequency Distribution of 5000 Simulated \n20-Day Returns for Portfolio One\n",
+     xlab="\nProjected Returns")
+#cat(paste0('The average expected return for portfolio one is ', round(mean(port1sim[,n_days] - initial_wealth),digits=2),'.'))
+
+# Portfolio one 5% VaR
+VaR5 <- quantile(port1sim[,n_days] - initial_wealth, prob=0.05)
+#cat(paste0('The 5% value at risk is ',unname(VaR5),'.'))
+
+```
+  
+The average expected return for portfolio one is -\$36.51. The 5% value at risk is $9,138.34.
+  
+---
+  
+### (ii) A Low Risk Portfolio
+For the low-risk portfolio, I started with ETFdb's *Top 40 Government Bonds* category. I wanted to include the five with the high expense-ratios (all were .75% except for PLW, which was .25%) to see if I could still make some profit while taking on virtually no risk. Unfortunately, only PLW had data going back at least five years, so I chose four others from the category, each with ER's of .15%.
+  
+```{r q3_low_risk_port_plot, echo=FALSE, message=FALSE}
+
+# Repeat for low-risk portfolio (port2)
+mystocks = c("SHY", "SHV", "TLT", "IEF", "PLW")
+myprices = getSymbols(mystocks, from = "2007-01-01")
+for(ticker in mystocks) {
+  expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+  eval(parse(text=expr))
+}
+
+all_returns = cbind(ClCl(SHYa),ClCl(SHVa),ClCl(TLTa),ClCl(IEFa),ClCl(PLWa))
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+port2sim = foreach(i=1:5000, .combine='rbind') %do% {
+  total_wealth = initial_wealth
+  weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+  holdings = weights * total_wealth
+  n_days = 20
+  wealthtracker = rep(0, n_days)
+  for(today in 1:n_days) {
+    return.today = resample(all_returns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    total_wealth = sum(holdings)
+    wealthtracker[today] = total_wealth
+  }
+  wealthtracker
+}
+
+# Low-risk portfolio profit/loss
+hist(port2sim[,n_days] - initial_wealth, breaks=30, 
+     main='Frequency Distribution of 5000 Simulated \n20-Day Returns for Portfolio Two\n',
+     xlab='\nProjected Returns')
+#cat(paste0('The average expected return for portfolio two is ', round(mean(port2sim[,n_days] - initial_wealth),digits=2),'.'))
+
+# Portfolio one 5% VaR
+VaR5 <- quantile(port2sim[,n_days] - initial_wealth, prob=0.05)
+#cat(paste0('The 5% value at risk is ',unname(VaR5),'.'))
+
+```
+  
+The average expected return for portfolio two is \$360.85. The 5% value at risk is $2,567.72.
+  
+---
+  
+### (iii) A High Risk Portfolio
+I initially picked from ETFdb's *Volatility ETFs* category to create this portfolio, but there was only data back to 2019 for these. Instead, portfolio three includes two EFTs from the *Leveraged Volatility* category and one from the *Technology* category since tech is generally volatile.
+  
+```{r q3_high_risk_port_plot, echo=FALSE, message=FALSE}
+
+mystocks = c("UVXY", "SVXY", "KOIN")
+myprices = getSymbols(mystocks, from = "2007-01-01")
+for(ticker in mystocks) {
+  expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+  eval(parse(text=expr))
+}
+
+all_returns = cbind(ClCl(UVXY),ClCl(SVXYa),ClCl(KOINa))
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+port3sim = foreach(i=1:5000, .combine='rbind') %do% {
+  total_wealth = initial_wealth
+  weights = c(0.33, 0.34, 0.33)
+  holdings = weights * total_wealth
+  n_days = 20
+  wealthtracker = rep(0, n_days)
+  for(today in 1:n_days) {
+    return.today = resample(all_returns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    total_wealth = sum(holdings)
+    wealthtracker[today] = total_wealth
+  }
+  wealthtracker
+}
+
+# Low-risk portfolio profit/loss
+hist(port3sim[,n_days] - initial_wealth, breaks=30, 
+     main="Frequency Distribution of 5000 Simulated \n20-Day Returns for Portfolio Three\n",
+     xlab="\nProjected Returns")
+#cat(paste0('The average expected return for portfolio three is ', round(mean(port3sim[,n_days] - initial_wealth),digits=2),'.'))
+
+# Portfolio one 5% VaR
+VaR5 <- quantile(port3sim[,n_days] - initial_wealth, prob=0.05)
+#cat(paste0('The 5% value at risk is ',unname(VaR5),'.'))
+
+```
+  
+The average expected return for portfolio three is -\$830.84. The 5% value at risk is $26,117.16.
+  
+---
+  
+### (iv) Summary
+Of these three portfolios, the Monte-Carlo model of the second (low-risk) predicts the highest average expected return and lowest 5% value at risk, so I would invest the $100,000 in that portfolio.
+
+```{r, echo=FALSE}
+options(warn=1)
+```
+  
+---
+  
+## Question Four: Market Segmentation
+
+This was data collected in the course of a market-research study using followers of the Twitter account of a large consumer brand that shall remain nameless---let's call it "NutrientH20" just to have a label. The goal here was for NutrientH20 to understand its social-media audience a little bit better, so that it could hone its messaging a little more sharply. Each row of social_marketing.csv represents one user, labeled by a random (anonymous, unique) 9-digit alphanumeric code. Each column represents an interest, which are labeled along the top of the data file. We had to analyze this data prepare a concise report for NutrientH20 that identifies any interesting market segments that appear to stand out in their social-media audience. 
+  
+### (i) Step 1: We first loaded the data, scaled it, and took out some of the categories that would not benefit the analysis, such as chatter, uncategorized, spam, and adult.
+  
+``` {r, Loading and scaling the data, echo=FALSE}
+set.seed(123)
+
+
+library(ggplot2)
+library(LICORS)  # for kmeans++
+library(foreach)
+library(mosaic)
+library(cluster)
+
+mkt_seg = read.csv('https://raw.githubusercontent.com/jgscott/STA380/master/data/social_marketing.csv', header=TRUE)
+
+#scales the data and takes out the first column with the id number, spam, chatter, uncategorized, and adult
+S = mkt_seg[,-c(1:2,6,36:37)]
+S = scale(S, center=TRUE, scale=TRUE)
+
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(S,"scaled:center")
+sigma = attr(S,"scaled:scale")
+
+```
+  
+### (ii) Step 2: To better understand the relationship categories, we created a correlation matrix, ordering the variables by hierarchical clustering. You can begin to see category clusters. For example, college uni, online_gaming, and sports_playing are highly correlated tweet categories, and one could deduce that this particular market segment could be college students.
+
+``` {r, correlation matrix, echo=FALSE}
+##### PCA
+
+# looks a mess -- reorder the variables by hierarchical clustering
+ggcorrplot::ggcorrplot(cor(S), hc.order = TRUE)
+
+```
+  
+### (iii) Step 3: In order to perform a clustering analysis, we must first decide the number of clusters that we want to use. To do this, we ran an elbow plot. It is difficult to find the exact elbow of this plot, but we can estimate that it is around a k value of 5 0r 6. We will use 5 clusters because this will provide clearer insights for NutrientH20. 
+``` {r, Elbow Plot to find Optimal number of clusters, echo=FALSE}
+#Elbow Method for finding the optimal number of clusters
+
+# Compute and plot wss for k = 2 to k = 15.
+
+### probably 5 or 6
+k.max <- 15
+wss <- sapply(1:k.max, 
+              function(k){kmeans(S, k, nstart=50,iter.max = 15 )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+
+
+
+### gap statistic --> taking forever 
+#users_gap = clusGap(S, FUN = kmeans, nstart = 50, K.max = 10, B = 100)
+#plot(users_gap)
+
+
+```
+  
+### (iv) Step 4: We then ran K-means and K-means++ to segment the users into 5 clusters. Both methods resulted in the same within cluster sum of squares as well as between cluster sum of squares, so there is not a clear favorite between the two methods. We were able to take a look at the data archetype of each cluster, highlighting the average value for each category in the cluster. This gave us a sense of what type of users the clusters consisted of. Using this information as well as relationships defined from the correlation matrix, we constructed plots to make sure that plots with our defined cluster characteristics consist of mostly users in that cluster. For example, when we plotted travel and politics, cluster one made up a majority of the plot, and that is considered the cluster related to productive business personnel. Using this method for each cluster, we determined the market segmentation. 
+
+Cluster 1: Productive Business Personnel - Frequent Categories: travel, politics, computers
+Cluster 2: College Students - Frequent Categories: college_uni, online_gaming, sports_playing
+Cluster 3: Family/Friendly Adults - Frequent Categories: parenting, religion, sports_fandom, school, family
+Cluster 4: Fashion Enthusiasts - Frequent Categories: fashion, beauty, cooking
+Cluster 5: Physical Health Enthusiasts - Frequent Categories: personal_fitness, health_nutrition, outdoors
+
+``` {r, KMEANS and KMEANS ++, echo=FALSE}
+# KMEANS
+
+
+# Run k-means with 6 clusters and 25 starts
+# 25 different random initializations 
+# picks the best of the 25 based on the SSEw
+clust1 = kmeans(S, 5, nstart=25)
+
+# What are the clusters?
+# summary of a type of tweet that occurs again and again and again (data archetype)
+clust1$center  # not super helpful
+clust1$center[1,]*sigma + mu
+clust1$center[2,]*sigma + mu
+clust1$center[3,]*sigma + mu
+clust1$center[4,]*sigma + mu
+clust1$center[5,]*sigma + mu
+
+# A few plots with cluster membership shown
+# qplot is in the ggplot2 library
+
+# cluster 1 --> business people , productive adults
+qplot(travel, politics, data=mkt_seg, color=factor(clust1$cluster))
+# cluster 2 --> college students
+qplot(college_uni, online_gaming, data=mkt_seg, color=factor(clust1$cluster))
+#cluster 3 --> wholesome adults
+qplot(parenting, religion, data=mkt_seg, color=factor(clust1$cluster))
+#cluster 4 --> those interested in fashion / beauty
+qplot(fashion, beauty, data=mkt_seg, color=factor(clust1$cluster))
+#cluster 5 --> those interested in fitness and nutrition
+qplot(personal_fitness, health_nutrition, data=mkt_seg, color=factor(clust1$cluster))
+
+
+# Which users are in which clusters?
+which(clust1$cluster == 1)
+which(clust1$cluster == 2)
+which(clust1$cluster == 3)
+which(clust1$cluster == 4)
+which(clust1$cluster == 5)
+
+# Using kmeans++ initialization
+clust2 = kmeanspp(S, k=5, nstart=25)
+
+clust2$center[1,]*sigma + mu
+clust2$center[2,]*sigma + mu
+clust2$center[4,]*sigma + mu
+
+# Which users are in which clusters?
+which(clust2$cluster == 1)
+which(clust2$cluster == 2)
+which(clust2$cluster == 3)
+
+# Compare versus within-cluster average distances from the first run
+
+# ordinary k means sum of squares for each cluster
+clust1$withinss
+# k means++ sum of squares for each cluster
+clust2$withinss
+# sum of each clusters SSE for k means
+sum(clust1$withinss)
+# sum of each clusters SSE for k means++ , it does only SLIGHTLY better
+sum(clust2$withinss)
+
+# this does the sums for you
+clust1$tot.withinss
+clust2$tot.withinss
+
+# the between cluster measures SSEb between cluster sum of squares
+clust1$betweenss
+clust2$betweenss
+
+#plot the clusters
+clusplot(clust1)
+
+```
+
+
+### (v) Step 5: We also performed hierarchical clustering to compare our findings with k-means. We cut the tree of at 5 clusters. After trying complete, single, and average linkage methods, the clusters were too skewed. Complete was the least skewed, but the distribution of users throughout the clusters was still disproportionately weighted toward cluster 1. Because of this, we are sticking with the results obtained from the k-means analysis. 
+
+``` {r, Hierarchical Clustering stuff, echo=FALSE}
+
+
+
+
+## Now the market segment data
+mkt_seg = read.csv('social_marketing.csv', header=TRUE)
+
+
+
+#scales the data and takes out the first column with the id number
+S = mkt_seg[,-c(1:2,6,36:37)]
+S = scale(S, center=TRUE, scale=TRUE)
+
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(S,"scaled:center")
+sigma = attr(S,"scaled:scale")
+
+# First form a pairwise distance matrix
+distance_between_users = dist(S)
+
+# Now run hierarchical clustering
+h1 = hclust(distance_between_users, method='complete')
+
+# Cut the tree into 5 clusters
+hcluster1 = cutree(h1, k=5)
+summary(factor(hcluster1))
+
+
+# Plot the dendrogram
+plot(h1, cex=0.3)
+
+# Now run hierarchical clustering
+#### this is very skewed
+h2 = hclust(distance_between_users, method='single')
+
+# Cut the tree into 5 clusters
+hcluster2 = cutree(h2, k=5)
+summary(factor(hcluster2))
+
+
+# Plot the dendrogram
+plot(h2, cex=0.3)
+
+# Now run hierarchical clustering
+### this is also very skewed
+h3 = hclust(distance_between_users, method='average')
+
+# Cut the tree into 5 clusters
+hcluster3 = cutree(h3, k=5)
+summary(factor(hcluster3))
+
+
+# Plot the dendrogram
+plot(h3, cex=0.3)
+
+```
+
+### (vi) Summary: 
+
+The correlation matrix gave us a relationships between category variables to look out for. The elbow plot helped us make a decision on the number of clusters. K-means and K-means++ gave us the same within sum of squares values and between sum of squares values. The summary of the scales and centers of each cluster from the K-means analysis gave us a sense of the categories that stood out within each cluster of users. With this information, we were able to plot categories of each cluster to confirm that it primarily consisted of the users we identified from the data archetype summaries. 
+
+We determined five key segments of the market that NutrientH20 can leverage to target their advertising strategies. These five segments are defined as follows:
+
+Cluster 1: Productive Business Personnel - Frequent Categories: travel, politics, computers
+Cluster 2: College Students - Frequent Categories: college_uni, online_gaming, sports_playing
+Cluster 3: Family/Friendly Adults - Frequent Categories: parenting, religion, sports_fandom, school, family
+Cluster 4: Fashion Enthusiasts - Frequent Categories: fashion, beauty, cooking
+Cluster 5: Physical Health Enthusiasts - Frequent Categories: personal_fitness, health_nutrition, outdoors
+
+---
+
+## Question Five: Author Attribution
+
+```{r, echo=FALSE}
+
+library(tm)
+library(class)
+library(caret)
+library(randomForest)
+
+
+readerPlain = function(fname){
+  readPlain(elem=list(content=readLines(fname)), 
+            id=fname, language='en') }
+
+author_dirs = Sys.glob('data/ReutersC50/C50train/*')
+file_list = NULL
+labels = NULL
+
+##############################The training model###########################
+
+for(author in author_dirs) {
+  author_name = substring(author, first=26)
+  files_to_add = Sys.glob(paste0(author, '/*.txt'))
+  file_list = append(file_list, files_to_add)
+  labels = append(labels, rep(author_name, length(files_to_add)))
+}
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+documents_raw = Corpus(VectorSource(all_docs))
+my_documents = documents_raw
+my_documents = documents_raw %>%
+  tm_map(content_transformer(tolower))  %>%             # make everything lowercase
+  tm_map(content_transformer(removeNumbers)) %>%        # remove numbers
+  tm_map(content_transformer(removePunctuation)) %>%    # remove punctuation
+  tm_map(content_transformer(stripWhitespace))          # remove excess white-space
+my_documents = tm_map(my_documents, content_transformer(removeWords), stopwords("en"))
+
+DTM_train = DocumentTermMatrix(my_documents)
+DTM_train = removeSparseTerms(DTM_train, 0.98)
+
+tfidf_train = weightTfIdf(DTM_train)
+X = as.matrix(DTM_train)
+TFIDFtrain=as.matrix(tfidf_train)
+dftrain = as.data.frame(X)
+
+
+
+##############################The testing model#############################
+author_dirstest = Sys.glob('data/ReutersC50/C50test/*')
+file_listtest = NULL
+labelstest = NULL
+for(author in author_dirstest) {
+  author_nametest = substring(author, first=25)
+  files_to_addtest = Sys.glob(paste0(author, '/*.txt'))
+  file_listtest = append(file_listtest, files_to_addtest)
+  labelstest = append(labelstest, rep(author_nametest, length(files_to_addtest)))
+}
+
+all_docstest = lapply(file_listtest, readerPlain) 
+names(all_docstest) = file_listtest
+names(all_docstest) = sub('.txt', '', names(all_docstest))
+
+documents_rawtest = Corpus(VectorSource(all_docstest))
+my_documentstest = documents_rawtest
+my_documentstest = documents_rawtest %>%
+  tm_map(content_transformer(tolower))  %>%             
+  tm_map(content_transformer(removeNumbers)) %>%        
+  tm_map(content_transformer(removePunctuation)) %>%    
+  tm_map(content_transformer(stripWhitespace))          
+my_documentstest = tm_map(my_documentstest, content_transformer(removeWords), stopwords("en"))
+
+DTM_test = DocumentTermMatrix(my_documentstest)
+DTM_test = removeSparseTerms(DTM_test, 0.98)
+
+tfidf_test = weightTfIdf(DTM_test)
+Y = as.matrix(DTM_test)
+TFIDFtest=as.matrix(tfidf_test)
+
+##################################################################################
+
+library(e1071)
+
+NB = naiveBayes(x=TFIDFtrain, y=as.factor(labels), laplace = 1)
+Nbtest = predict(NB, TFIDFtest)
+Nbtable = as.data.frame(table(Nbtest,labelstest))
+mean(Nbtable$Freq)
+
+
+#################################################################################
+library(randomForest)
+RF= randomForest(labels ~., data = dftrain, ntree =10)
+
+
+
+
+
+################################################################################
+
+
+
+
+
+```
+  
+---
+  
+## Question Six: Association Rule Mining
+  
+### (i) General Summary of the Data
+Using summary(), we can see there are 9,835 lines in *groceries.txt,* meaning there are 9,835 transactions/shoppping carts recorded in the data. Following the online documentation for *arules,* we then converted the large character vector created by readLines(...) into a dataframe of factors, which could then be coerced into transactions and included in an item matrix of all transactions called *carts.*
+  
+```{r, q6 loading stuff in, include=FALSE}
+
+install.packages('arules',repos = "http://cran.us.r-project.org")
+install.packages('arulesViz',dependencies=TRUE,repos = "http://cran.us.r-project.org")
+library(arules)
+library(arulesViz)
+library(ggplot2)
+library(tidyverse)
+
+```
+
+```{r, q6 reading in the data, echo=FALSE}
+
+#groceries <- read.csv('https://raw.githubusercontent.com/jgscott/STA380/master/data/groceries.txt', sep='\n', header=FALSE)
+#arules documentation p76 says use readLines instead of read_csv for turning txt to factors to transactions
+#groceries = readLines(groceries0)
+groceries = readLines('https://raw.githubusercontent.com/jgscott/STA380/master/data/groceries.txt')
+
+summary(groceries)
+head(groceries)
+#attach(groceries)
+
+groceries2 = strsplit(groceries, ",")
+#arules documentation pg 96 shows how to turn data->factors->transactions
+#data[,"a_nominal_var"] <-factor(data[,"a_nominal_var"])
+#groceries[,] <-factor(groceries[,])
+#sigh
+#pg 7 shows how to turn strings into factors
+#Adult <- as(AdultUCI, "transactions")
+carts <- as(groceries2, "transactions")
+
+```
+  
+Using summary() again on *carts* tells us that the 9,835 transactions include 43,367 individual items and that there are 169 unique types of items recorded.
+  
+```{r, q6 barchart of top five items, echo=FALSE}
+
+numbersold = c(2513, 1903, 1809, 1715, 1372)
+itemnames = c("Whole Milk", "Other Veg.", "Rolls n' Buns", "Soda", "Yogurt")
+barplot(numbersold,names.arg=itemnames,ylab='Number Sold',main='Top Five Most Common Items')
+
+```
+  
+```{r, q6 summary and piechart, echo=FALSE}
+
+summary(carts) #lists top 5 frequent items; can get top 10 w itemFrequencyPlot (p.57)
+#pie chart of top five items compared to rest of items
+topfiveitems <- data.frame(
+  group = c("Whole Milk, 5.79%", "Other Vegetables, 4.39%", "Rolls n' Buns, 4.17%", "Soda, 3.95%", "Yogurt, 3.16%", "Other, 78.53%"),
+  value = c(2513, 1903, 1809, 1715, 1372, 34055)
+)
+
+```
+
+```{r, q6 barchart, include=FALSE}
+
+topfiveitemsbar <- ggplot(topfiveitems, aes(x="", y=value, fill=group))+
+  geom_bar(width = 1, stat = "identity")
+topfiveitemsbar
+
+```
+  
+The pie chart below illustrates the relative frequencies of the top five most common items against all other items; using itemFrequencyPlot() shows the relative frequencies of the top ten most common items.
+  
+```{r, piechart, echo=FALSE}
+
+topfiveitemspie <- topfiveitemsbar + coord_polar("y", start=0) +
+  scale_fill_brewer(palette="Dark2")
+topfiveitemspie
+
+itemFrequencyPlot(carts, topN = 10)#see documentation online for side by side comparison of this plot vs. one that includes lift/support
+itemFrequency(carts) #output this in rm doc
+#inspect(carts)
+
+```
+  
+**Trial and Error Rule Sets:** For creating rule sets, we first used the parameters set in the playlists.R Spotify example: *support = 0.005, confidence = 0.1, and maxlen = 5*. These settings give 1582 rules and lots of empty LHS rules, so for the next trial-and-error rule set, we increased support to 0.05 and left the other parameters at their respective levels.
+  
+```{r, trial and error rule set 1, include=FALSE}
+
+#annotate the first two trial and error rule sets in md
+#starting with the parameters set in playlists example
+#these parameters give 1582 rules... increase the support value maybe
+cartsrules1 = apriori(carts, 
+                      parameter=list(support=0.005, confidence=.1, maxlen=5))
+inspect(cartsrules1) 
+
+```
+  
+The second rule set gives us only 14 rules which is much more useful, but we still have empty LHS rules, so in the next rule sets we decided to change *maxlen = 5* to *minlen = 2*.
+  
+```{r, trial and error rule set 2, echo=FALSE}
+#these parameters give 14 rules
+cartsrules2 = apriori(carts, 
+                      parameter=list(support=0.05, confidence=.1, maxlen=5))
+inspect(cartsrules2)#what does an empty left side mean again?
+#these parameters include carts w only one item and shouldn't have empty left sides
+
+```
+  
+**Final 15 Rules:** In our final rule set, whole milk is the most common rhs (i.e., its the most predictable); this makes sense because it's the most commonly bought item.
+  
+```{r, final rule sets, echo=FALSE}
+
+#include these as focal rule sets
+#cartsrules3 = apriori(carts, 
+#                      parameter=list(support=0.05, confidence=.1, minlen=2))
+#inspect(cartsrules3)
+#plot(cartsrules3,by='lift', method='graph')
+#plot(head(cartsrules3,6,by='lift', method='graph'))
+
+cartsrules4 = apriori(carts, 
+                      parameter=list(support=0.01, confidence=.5, minlen=2))
+inspect(cartsrules4)#in this rule set whole milk is the most common rhs (i.e., its the most predictable?); this makes sense because it's the most commonly bought item
+plot(cartsrules4,by='lift', method='graph')
+plot(head(cartsrules4,15,by='lift', method='graph'))
+
+```
